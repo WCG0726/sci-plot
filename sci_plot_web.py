@@ -1,14 +1,13 @@
 """
-sci_plot_web.py - 科研绘图工具 Web版 (增强版)
-=============================================
+sci_plot_web.py - 科研绘图工具 Web版 (增强版 v2.1)
+==================================================
 使用Streamlit构建的交互式科研绘图界面
 
-功能:
-- 配色系统: Nature/ColorBrewer/色盲友好
-- 图例控制: 位置/样式/字号
-- 模板系统: 保存/加载配置
-- 批量出图: 多文件处理
-- 数据预处理: 缺失值/类型转换
+新功能:
+- 字体选择: Arial, Times New Roman, 微软雅黑
+- 字体加粗选项
+- 数据编辑: 添加/删除行列
+- 单个颜色选择
 
 启动方法:
     streamlit run sci_plot_web.py
@@ -37,20 +36,16 @@ st.set_page_config(
 )
 
 # ============================================================
-# 中文字体自动检测
+# 获取可用字体
 # ============================================================
-def setup_chinese_font():
-    chinese_fonts = ['Microsoft YaHei', 'SimHei', 'SimSun', 'Noto Sans CJK SC',
-                     'WenQuanYi Micro Hei', 'PingFang SC', 'Heiti SC']
+def get_available_fonts():
+    """获取系统可用字体"""
     available = {f.name for f in fm.fontManager.ttflist}
-    for font in chinese_fonts:
-        if font in available:
-            plt.rcParams['font.sans-serif'] = [font] + plt.rcParams['font.sans-serif']
-            plt.rcParams['axes.unicode_minus'] = False
-            return font
-    return None
+    common = ['Arial', 'Times New Roman', 'Microsoft YaHei', 'SimHei', 
+              'SimSun', 'Calibri', 'Cambria', 'Georgia', 'Verdana']
+    return [f for f in common if f in available]
 
-CN_FONT = setup_chinese_font()
+AVAILABLE_FONTS = get_available_fonts()
 
 # ============================================================
 # 自定义样式
@@ -59,7 +54,8 @@ st.markdown("""
 <style>
     .stButton button {background-color: #00A087; color: white; border-radius: 5px;}
     .stButton button:hover {background-color: #008066;}
-    .color-box {display: inline-block; width: 30px; height: 20px; margin: 2px; border-radius: 3px;}
+    .color-box {display: inline-block; width: 25px; height: 15px; margin: 1px; border-radius: 2px; border: 1px solid #ddd;}
+    .color-row {display: flex; align-items: center; gap: 5px; margin: 3px 0;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -69,8 +65,18 @@ st.markdown("""
 
 def setup_plot_style(config):
     """根据配置设置绘图样式"""
+    # 字体设置
+    font = config.get('font', 'Arial')
+    fontweight = 'bold' if config.get('font_bold', False) else 'normal'
+    
     plt.rcParams.update({
+        'font.family': 'sans-serif',
+        'font.sans-serif': [font, 'DejaVu Sans'],
         'font.size': config.get('fontsize', 10),
+        'font.weight': fontweight,
+        'axes.unicode_minus': False,
+        'axes.labelweight': fontweight,
+        'axes.titleweight': fontweight,
         'figure.figsize': config.get('figsize', (8, 6)),
         'figure.dpi': 150,
         'axes.linewidth': 1.0,
@@ -89,18 +95,69 @@ def setup_plot_style(config):
             'xtick.top': False, 'ytick.right': False,
         })
 
-def get_colors(palette_name, n=10):
+def get_colors(config, n=10):
     """获取配色方案"""
-    return ColorPalettes.get_palette(palette_name, n)
+    if config.get('use_custom_colors', False):
+        custom = config.get('custom_colors', [])
+        if custom:
+            # 循环扩展到n个
+            while len(custom) < n:
+                custom = custom + custom
+            return custom[:n]
+    return ColorPalettes.get_palette(config.get('palette', 'Nature'), n)
 
-def display_color_preview(palette_name):
-    """显示配色预览"""
-    colors = get_colors(palette_name, 8)
-    html = '<div style="display: flex; gap: 2px; margin: 5px 0;">'
-    for c in colors:
-        html += f'<div class="color-box" style="background-color: {c};"></div>'
-    html += '</div>'
-    st.sidebar.markdown(html, unsafe_allow_html=True)
+def display_color_picker_ui(config_key, default_colors, max_colors=10):
+    """显示颜色选择器UI"""
+    colors = []
+    cols = st.columns(min(5, max_colors))
+    for i in range(max_colors):
+        with cols[i % 5]:
+            default = default_colors[i] if i < len(default_colors) else '#888888'
+            color = st.color_picker(f"颜色{i+1}", default, key=f"{config_key}_{i}")
+            colors.append(color)
+    return colors
+
+# ============================================================
+# 数据编辑模块
+# ============================================================
+
+def data_editor_section(df):
+    """数据编辑区域"""
+    st.markdown("---")
+    st.subheader("📝 数据编辑")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("**添加行**")
+        add_row_count = st.number_input("添加行数", 1, 10, 1, key="add_row_count")
+        if st.button("➕ 添加空行"):
+            new_rows = pd.DataFrame([[np.nan] * len(df.columns)] * add_row_count, 
+                                    columns=df.columns)
+            df = pd.concat([df, new_rows], ignore_index=True)
+            st.success(f"已添加 {add_row_count} 行")
+    
+    with col2:
+        st.markdown("**添加列**")
+        new_col_name = st.text_input("新列名", "New_Column", key="new_col_name")
+        if st.button("➕ 添加列"):
+            df[new_col_name] = np.nan
+            st.success(f"已添加列: {new_col_name}")
+    
+    with col3:
+        st.markdown("**删除操作**")
+        if st.button("🗑️ 删除最后一行") and len(df) > 0:
+            df = df.iloc[:-1]
+            st.success("已删除最后一行")
+        if st.button("🗑️ 删除最后一列") and len(df.columns) > 1:
+            df = df.iloc[:, :-1]
+            st.success("已删除最后一列")
+    
+    # 可编辑数据表
+    st.markdown("**直接编辑数据 (双击单元格编辑):**")
+    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+    
+    return edited_df
 
 # ============================================================
 # 数据输入模块
@@ -111,7 +168,7 @@ def data_input_section():
     st.sidebar.header("📁 数据输入")
     
     data_source = st.sidebar.radio("选择数据来源", 
-                                    ["上传文件", "手动输入", "示例数据"])
+                                    ["上传文件", "手动输入", "示例数据", "在线编辑"])
     
     df = None
     
@@ -148,7 +205,6 @@ def data_input_section():
                 rows = []
                 for line in data_text.strip().split('\n'):
                     row = [x.strip() for x in line.split(',')]
-                    # 尝试转换为数字
                     processed_row = []
                     for v in row:
                         try:
@@ -160,7 +216,7 @@ def data_input_section():
             except Exception as e:
                 st.sidebar.error(f"格式错误: {e}")
     
-    else:  # 示例数据
+    elif data_source == "示例数据":
         example_type = st.sidebar.selectbox(
             "选择示例数据",
             ["随机散点", "正弦余弦", "分组数据", "相关性矩阵", "时间序列", "误差线数据"]
@@ -206,30 +262,14 @@ def data_input_section():
         
         st.sidebar.success(f"✅ {example_type}")
     
-    return df
-
-# ============================================================
-# 数据预处理
-# ============================================================
-
-def data_preprocessing(df):
-    """数据预处理"""
-    st.sidebar.markdown("---")
-    st.sidebar.header("🔧 数据预处理")
-    
-    # 缺失值处理
-    missing_action = st.sidebar.selectbox(
-        "缺失值处理",
-        ["保持不变", "删除含缺失行", "填充0", "填充均值"]
-    )
-    
-    if missing_action == "删除含缺失行":
-        df = df.dropna()
-    elif missing_action == "填充0":
-        df = df.fillna(0)
-    elif missing_action == "填充均值":
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
-        df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].mean())
+    else:  # 在线编辑
+        st.sidebar.info("请在主界面编辑数据")
+        # 创建空模板
+        df = pd.DataFrame({
+            'X': [1, 2, 3, 4, 5],
+            'Y': [2, 4, 6, 8, 10],
+            'Group': ['A', 'B', 'A', 'B', 'A']
+        })
     
     return df
 
@@ -249,6 +289,20 @@ def chart_config_section():
     config['xlabel'] = st.sidebar.text_input("X轴标签", value="")
     config['ylabel'] = st.sidebar.text_input("Y轴标签", value="")
     
+    # 字体设置
+    st.sidebar.subheader("🔤 字体设置")
+    if AVAILABLE_FONTS:
+        config['font'] = st.sidebar.selectbox("字体", AVAILABLE_FONTS, 
+                                               index=0 if 'Arial' in AVAILABLE_FONTS else 0)
+    else:
+        config['font'] = st.sidebar.selectbox("字体", ['Arial', 'Times New Roman', 'Microsoft YaHei'])
+    
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        config['fontsize'] = st.slider("字号", 8, 20, 12)
+    with col2:
+        config['font_bold'] = st.checkbox("加粗", value=False)
+    
     # 图片尺寸
     st.sidebar.subheader("📐 图片尺寸")
     col1, col2 = st.sidebar.columns(2)
@@ -266,10 +320,20 @@ def chart_config_section():
     for category, names in palettes.items():
         all_palettes.extend(names)
     
-    config['palette'] = st.sidebar.selectbox("选择配色", all_palettes, index=0)
-    display_color_preview(config['palette'])
+    config['palette'] = st.sidebar.selectbox("预设配色", all_palettes, index=0)
     
-    # 顺序/发散配色
+    # 单个颜色选择
+    config['use_custom_colors'] = st.sidebar.checkbox("自定义颜色", value=False)
+    if config['use_custom_colors']:
+        st.sidebar.markdown("**选择颜色 (最多10个):**")
+        default_colors = ['#E64B35', '#4DBBD5', '#00A087', '#3C5488', '#F39B7F',
+                          '#8491B4', '#91D1C2', '#DC0000', '#7E6148', '#B09C85']
+        config['custom_colors'] = []
+        for i in range(10):
+            color = st.sidebar.color_picker(f"颜色{i+1}", default_colors[i], key=f"color_{i}")
+            config['custom_colors'].append(color)
+    
+    # 热力图配色
     config['cmap'] = st.sidebar.selectbox(
         "热力图/连续配色",
         ['RdBu_r', 'coolwarm', 'viridis', 'Blues', 'YlOrRd', 'Spectral']
@@ -282,7 +346,6 @@ def chart_config_section():
     
     # 刻度设置
     config['tick_inward'] = st.sidebar.checkbox("内向刻度", value=True)
-    config['fontsize'] = st.sidebar.slider("字号", 8, 16, 10)
     
     # 图例设置
     st.sidebar.subheader("📋 图例设置")
@@ -299,12 +362,6 @@ def chart_config_section():
 # 图表绘制函数
 # ============================================================
 
-def get_colors_for_plot(config, n=10):
-    """根据配置获取颜色"""
-    if config.get('colorblind'):
-        return ColorPalettes.get_palette('colorblind', n)
-    return ColorPalettes.get_palette(config.get('palette', 'Nature'), n)
-
 def plot_scatter(df, config):
     """散点图"""
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
@@ -319,7 +376,7 @@ def plot_scatter(df, config):
         color_col = st.selectbox("颜色分组", ['无'] + all_cols, key='scatter_color')
     
     fig, ax = plt.subplots(figsize=config['figsize'])
-    colors = get_colors_for_plot(config)
+    colors = get_colors(config)
     
     if color_col == '无':
         ax.scatter(df[x_col], df[y_col], s=50, alpha=0.7,
@@ -353,7 +410,7 @@ def plot_line(df, config):
                                 key='line_y')
     
     fig, ax = plt.subplots(figsize=config['figsize'])
-    colors = get_colors_for_plot(config)
+    colors = get_colors(config)
     markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p']
     
     for i, y_col in enumerate(y_cols):
@@ -380,10 +437,10 @@ def plot_bar(df, config):
     with col2:
         val_cols = st.multiselect("数值列", numeric_cols, key='bar_val')
     
-    # 自动计算误差线
     compute_error = st.checkbox("自动计算误差线 (标准差)", value=False)
     
     fig, ax = plt.subplots(figsize=config['figsize'])
+    colors = get_colors(config)
     
     if val_cols:
         if compute_error:
@@ -394,7 +451,6 @@ def plot_bar(df, config):
         
         x = np.arange(len(bar_data))
         width = 0.8 / len(val_cols)
-        colors = get_colors_for_plot(config)
         
         for i, col in enumerate(val_cols):
             offset = (i - len(val_cols)/2 + 0.5) * width
@@ -426,7 +482,7 @@ def plot_histogram(df, config):
     density = st.checkbox("显示密度", value=False)
     
     fig, ax = plt.subplots(figsize=config['figsize'])
-    colors = get_colors_for_plot(config)
+    colors = get_colors(config)
     
     for i, col in enumerate(selected_cols):
         ax.hist(df[col], bins=bins, alpha=0.7, label=col, density=density,
@@ -449,7 +505,7 @@ def plot_pie(df, config):
         value_col = st.selectbox("数值列", df.select_dtypes(include=[np.number]).columns, key='pie_value')
     
     fig, ax = plt.subplots(figsize=(6, 6))
-    colors = get_colors_for_plot(config, len(df))
+    colors = get_colors(config, len(df))
     ax.pie(df[value_col], labels=df[label_col], autopct='%1.1f%%',
            colors=colors, startangle=90,
            wedgeprops={'linewidth': 1, 'edgecolor': 'white'})
@@ -489,7 +545,7 @@ def plot_box(df, config):
     show_points = st.checkbox("显示数据点", value=False)
     
     fig, ax = plt.subplots(figsize=config['figsize'])
-    colors = get_colors_for_plot(config)
+    colors = get_colors(config)
     
     if group_col != '无':
         groups = df[group_col].unique()
@@ -524,7 +580,7 @@ def plot_violin(df, config):
     inner = st.selectbox("内部样式", ['box', 'quartile', 'point', 'stick'], index=0)
     
     fig, ax = plt.subplots(figsize=config['figsize'])
-    colors = get_colors_for_plot(config)
+    colors = get_colors(config)
     
     groups = df[group_col].unique()
     data_list = [df[df[group_col] == g][value_col].values for g in groups]
@@ -554,7 +610,7 @@ def plot_errorbar(df, config):
         err_col = st.selectbox("误差列", numeric_cols, key='err_err')
     
     fig, ax = plt.subplots(figsize=config['figsize'])
-    colors = get_colors_for_plot(config)
+    colors = get_colors(config)
     ax.errorbar(df[x_col], df[y_col], yerr=df[err_col],
                 fmt='o-', capsize=5, color=colors[0], linewidth=1.5)
     ax.set_xlabel(config.get('xlabel') or x_col)
@@ -573,7 +629,7 @@ def plot_stack(df, config):
         y_cols = st.multiselect("Y轴数据", numeric_cols, key='stack_y')
     
     fig, ax = plt.subplots(figsize=config['figsize'])
-    colors = get_colors_for_plot(config)
+    colors = get_colors(config)
     
     if y_cols:
         ax.stackplot(df[x_col], *[df[c] for c in y_cols], labels=y_cols,
@@ -598,7 +654,7 @@ def plot_dual_axis(df, config):
     with col3:
         y2_col = st.selectbox("右Y轴", [c for c in numeric_cols if c != y1_col], key='dual_y2')
     
-    colors = get_colors_for_plot(config)
+    colors = get_colors(config)
     
     fig, ax1 = plt.subplots(figsize=config['figsize'])
     ax1.plot(df[x_col], df[y1_col], color=colors[0], marker='o', label=y1_col)
@@ -623,21 +679,20 @@ def plot_dual_axis(df, config):
 # 模板管理
 # ============================================================
 
-def template_section():
+def template_section(config):
     """模板管理区域"""
     st.sidebar.markdown("---")
     st.sidebar.header("💾 模板管理")
     
     # 保存模板
-    if st.sidebar.button("保存当前配置为模板"):
-        if 'current_config' in st.session_state:
-            config_json = json.dumps(st.session_state.current_config, indent=2)
-            st.sidebar.download_button(
-                label="下载模板",
-                data=config_json,
-                file_name="sci_plot_template.json",
-                mime="application/json"
-            )
+    if st.sidebar.button("保存当前配置"):
+        config_json = json.dumps(config, indent=2)
+        st.sidebar.download_button(
+            label="下载模板",
+            data=config_json,
+            file_name="sci_plot_template.json",
+            mime="application/json"
+        )
     
     # 加载模板
     uploaded_template = st.sidebar.file_uploader("加载模板", type=['json'])
@@ -689,13 +744,8 @@ def main():
     df = data_input_section()
     
     if df is not None:
-        # 数据预处理
-        df = data_preprocessing(df)
-        
         # 数据预览
-        with st.expander("📋 数据预览", expanded=False):
-            st.dataframe(df.head(20))
-            
+        with st.expander("📋 数据预览 & 编辑", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
                 st.write(f"**行数:** {df.shape[0]}")
@@ -704,18 +754,14 @@ def main():
                 st.write(f"**数值列:** {len(df.select_dtypes(include=[np.number]).columns)}")
                 st.write(f"**类别列:** {len(df.select_dtypes(exclude=[np.number]).columns)}")
             
-            # 列统计
-            if st.checkbox("显示列统计"):
-                st.dataframe(df.describe())
+            # 数据编辑
+            df = data_editor_section(df)
         
         # 图表配置
         config = chart_config_section()
         
-        # 保存配置到session
-        st.session_state.current_config = config
-        
         # 模板管理
-        template_section()
+        template_section(config)
         
         # 设置样式
         setup_plot_style(config)

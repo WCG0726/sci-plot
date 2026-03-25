@@ -150,9 +150,15 @@ class ColorPalettes:
 class PlotConfig:
     """绘图配置类"""
     
+    # 可用字体列表
+    AVAILABLE_FONTS = ['Arial', 'Times New Roman', 'Microsoft YaHei', 
+                       'SimHei', 'SimSun', 'Calibri', 'Cambria',
+                       'Consolas', 'Courier New', 'Georgia']
+    
     def __init__(self):
         self.font = 'Arial'
         self.fontsize = 10
+        self.fontweight = 'normal'  # 'normal', 'bold'
         self.dpi = 300
         self.figsize = (8, 6)
         self.tick_inward = True
@@ -162,6 +168,9 @@ class PlotConfig:
         self.legend_loc = 'best'
         self.legend_frame = True
         self.legend_fontsize = 9
+        # 自定义颜色列表
+        self.custom_colors = ['#E64B35', '#4DBBD5', '#00A087', '#3C5488', '#F39B7F',
+                              '#8491B4', '#91D1C2', '#DC0000', '#7E6148', '#B09C85']
         self._chinese_font = None
         self._setup_chinese_font()
     
@@ -178,17 +187,42 @@ class PlotConfig:
                 self._chinese_font = font
                 break
     
+    @staticmethod
+    def get_available_fonts():
+        """获取系统可用字体列表"""
+        available = {f.name for f in fm.fontManager.ttflist}
+        # 常用字体
+        common_fonts = ['Arial', 'Times New Roman', 'Microsoft YaHei', 
+                        'SimHei', 'SimSun', 'Calibri', 'Cambria',
+                        'Consolas', 'Courier New', 'Georgia', 'Verdana',
+                        'Tahoma', 'Trebuchet MS', 'Lucida Console']
+        result = []
+        for font in common_fonts:
+            if font in available:
+                result.append(font)
+        return result
+    
     def apply(self):
         """应用配置到matplotlib"""
+        # 构建字体列表
         fonts = [self.font]
-        if self._chinese_font:
-            fonts.insert(0, self._chinese_font)
+        if self.font != self._chinese_font and self._chinese_font:
+            fonts.append(self._chinese_font)
         fonts.extend(['Helvetica', 'DejaVu Sans'])
+        
+        # 去重
+        seen = set()
+        unique_fonts = []
+        for f in fonts:
+            if f and f not in seen:
+                seen.add(f)
+                unique_fonts.append(f)
         
         plt.rcParams.update({
             'font.family': 'sans-serif',
-            'font.sans-serif': fonts,
+            'font.sans-serif': unique_fonts,
             'font.size': self.fontsize,
+            'font.weight': self.fontweight,
             'axes.unicode_minus': False,
             'figure.figsize': self.figsize,
             'figure.dpi': self.dpi,
@@ -197,12 +231,15 @@ class PlotConfig:
             'axes.linewidth': 1.0,
             'axes.spines.top': True,
             'axes.spines.right': True,
+            'axes.labelweight': self.fontweight,
+            'axes.titleweight': self.fontweight,
             'lines.linewidth': 1.5,
             'lines.markersize': 6,
             'legend.frameon': self.legend_frame,
             'legend.framealpha': 1.0,
             'legend.edgecolor': 'black',
             'legend.fontsize': self.legend_fontsize,
+            'legend.title_fontsize': self.legend_fontsize + 1,
         })
         
         if self.tick_inward:
