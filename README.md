@@ -8,7 +8,7 @@
 
 **一个开箱即用的科研绘图工具，支持Web版和桌面版**
 
-**🌐 在线体验: [https://sci-plot-ks48i8d4dqthgaenlzvuqf.streamlit.app](https://sci-plot-ks48i8d4dqthgaenlzvuqf.streamlit.app)**
+**🌐 在线体验: [https://sci-plot-wcg-ai.streamlit.app/](https://sci-plot-wcg-ai.streamlit.app/)**
 
 [功能特点](#功能特点) • [快速开始](#快速开始) • [图表类型](#图表类型) • [配色方案](#配色方案) • [使用示例](#使用示例)
 
