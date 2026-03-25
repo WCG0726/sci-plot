@@ -129,6 +129,13 @@ def main():
     
     st.markdown("---")
     
+    # 数据输入区域（只在侧边栏调用一次）
+    df = data_input_section()
+    
+    # 使用session state共享数据
+    if df is not None:
+        st.session_state.current_data = df
+    
     # 使用Tab页组织功能
     tab1, tab2, tab3 = st.tabs(["📊 绘图", "📝 数据", "❓ 帮助"])
     
@@ -144,8 +151,8 @@ def main():
 
 def plot_tab():
     """绘图主界面"""
-    # 数据输入（简化版，只在侧边栏）
-    df = data_input_section()
+    # 从session state获取数据
+    df = st.session_state.get('current_data', None)
     
     if df is None:
         st.info("👈 请在左侧选择数据来源开始绘图")
@@ -206,8 +213,8 @@ def data_tab():
     """数据管理界面"""
     st.markdown("### 📝 数据管理")
     
-    # 数据输入
-    df = data_input_section()
+    # 从session state获取数据
+    df = st.session_state.get('current_data', None)
     
     if df is not None:
         # 数据预览
@@ -215,6 +222,9 @@ def data_tab():
         
         # 数据编辑
         df = data_editor_section(df)
+        
+        # 更新session state中的数据
+        st.session_state.current_data = df
     else:
         st.info("👈 请在左侧选择数据来源")
 
