@@ -417,13 +417,18 @@ def data_input_section():
         )
         if uploaded_file:
             try:
+                df = None
                 if uploaded_file.name.endswith('.csv'):
                     df = pd.read_csv(uploaded_file)
                 elif uploaded_file.name.endswith(('.xlsx', '.xls')):
                     df = pd.read_excel(uploaded_file)
                 elif uploaded_file.name.endswith('.tsv'):
                     df = pd.read_csv(uploaded_file, sep='\t')
-                st.sidebar.success(f"✅ {df.shape[0]}行 × {df.shape[1]}列")
+                else:
+                    st.sidebar.error(f"不支持的文件格式: {uploaded_file.name}")
+                
+                if df is not None:
+                    st.sidebar.success(f"✅ {df.shape[0]}行 × {df.shape[1]}列")
             except Exception as e:
                 st.sidebar.error(f"读取失败: {e}")
     

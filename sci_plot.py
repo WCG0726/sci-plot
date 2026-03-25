@@ -87,7 +87,7 @@ class ColorPalettes:
                        '#56B4E9', '#D55E00', '#F0E442', '#000000']
     
     @classmethod
-    def get_palette(cls, name: str, n_colors: int = None) -> List[str]:
+    def get_palette(cls, name: str, n_colors: Optional[int] = None) -> List[str]:
         """获取指定配色方案"""
         if name == 'Nature' or name == 'default':
             colors = cls.NATURE
@@ -254,11 +254,11 @@ class PlotConfig:
                 'xtick.top': False, 'ytick.right': False,
             })
     
-    def get_colors(self, n: int = None) -> List[str]:
+    def get_colors(self, n: Optional[int] = None) -> List[str]:
         """获取当前配色方案的颜色列表"""
         return ColorPalettes.get_palette(self.palette, n)
     
-    def save(self, filename: str, formats: List[str] = None):
+    def save(self, filename: str, formats: Optional[List[str]] = None):
         """保存当前图形"""
         if formats is None:
             formats = ['png', 'pdf']
@@ -309,7 +309,7 @@ class Statistics:
     
     @staticmethod
     def compute_errorbar(data: Union[pd.DataFrame, np.ndarray],
-                         group_col: str = None, value_col: str = None,
+                         group_col: Optional[str] = None, value_col: Optional[str] = None,
                          method: str = 'se') -> pd.DataFrame:
         """计算误差线数据"""
         if isinstance(data, pd.DataFrame) and group_col and value_col:
@@ -363,7 +363,7 @@ class SciPlot:
         if ylabel: ax.set_ylabel(ylabel)
     
     @classmethod
-    def _get_colors(cls, n: int = None) -> List[str]:
+    def _get_colors(cls, n: Optional[int] = None) -> List[str]:
         return cls.config.get_colors(n)
     
     # ==================== 基础图表 ====================

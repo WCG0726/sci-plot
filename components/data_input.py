@@ -37,14 +37,20 @@ def _upload_file():
     )
     if uploaded_file:
         try:
+            df = None
             if uploaded_file.name.endswith('.csv'):
                 df = pd.read_csv(uploaded_file)
             elif uploaded_file.name.endswith(('.xlsx', '.xls')):
                 df = pd.read_excel(uploaded_file)
             elif uploaded_file.name.endswith('.tsv'):
                 df = pd.read_csv(uploaded_file, sep='\t')
-            st.sidebar.success(f"✅ {df.shape[0]}行 × {df.shape[1]}列")
-            return df
+            else:
+                st.sidebar.error(f"不支持的文件格式: {uploaded_file.name}")
+                return None
+            
+            if df is not None:
+                st.sidebar.success(f"✅ {df.shape[0]}行 × {df.shape[1]}列")
+                return df
         except Exception as e:
             st.sidebar.error(f"读取失败: {e}")
     return None
@@ -53,7 +59,8 @@ def _upload_file():
 def _manual_input():
     """手动输入数据"""
     st.sidebar.subheader("手动输入数据")
-    col_names = st.sidebar.text_input("列名 (逗号分隔)", value="X,Y,Group").split(',')
+    col_names_input = st.sidebar.text_input("列名 (逗号分隔)", value="X,Y,Group")
+    col_names = [c.strip() for c in col_names_input.split(',') if c.strip()]
     data_text = st.sidebar.text_area(
         "数据 (每行一组，逗号分隔)",
         value="1, 2, A\n3, 4, B\n5, 6, A\n7, 8, B",
@@ -71,7 +78,12 @@ def _manual_input():
                     except:
                         processed_row.append(v)
                 rows.append(processed_row)
-            return pd.DataFrame(rows, columns=[c.strip() for c in col_names])
+            
+            # 如果没有提供列名，使用默认列名
+            if not col_names:
+                col_names = [f'Column_{i+1}' for i in range(len(rows[0]) if rows else 0)]
+            
+            return pd.DataFrame(rows, columns=col_names)
         except Exception as e:
             st.sidebar.error(f"格式错误: {e}")
     return None

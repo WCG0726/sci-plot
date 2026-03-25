@@ -587,9 +587,13 @@ class SciPlotGUI:
                 'Mean': [23, 45, 56, 78, 32],
                 'Std': [3, 5, 4, 6, 3]
             })
+        else:
+            messagebox.showwarning("提示", f"未知的示例数据类型: {example_type}")
+            return
         
-        self.info_label.config(text=f"已加载示例数据\n{self.df.shape[0]}行 × {self.df.shape[1]}列")
-        self.update_options()
+        if self.df is not None:
+            self.info_label.config(text=f"已加载示例数据\n{self.df.shape[0]}行 × {self.df.shape[1]}列")
+            self.update_options()
     
     def preview_data(self):
         """预览数据"""
@@ -630,6 +634,9 @@ class SciPlotGUI:
     
     def _create_figure(self):
         """创建图表"""
+        if self.df is None:
+            return
+        
         # 清除旧图表
         for widget in self.canvas_frame.winfo_children():
             widget.destroy()
