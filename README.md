@@ -42,13 +42,19 @@ pip install -r requirements.txt
 pip install matplotlib numpy pandas seaborn streamlit openpyxl
 ```
 
-### 2. Web版启动
+### 2. Web版启动 (模块化版本)
+
+```bash
+streamlit run app.py
+```
+
+浏览器会自动打开 `http://localhost:8501`
+
+### 旧版本 (单文件)
 
 ```bash
 streamlit run sci_plot_web.py
 ```
-
-浏览器会自动打开 `http://localhost:8501`
 
 ### 3. 桌面版启动
 
