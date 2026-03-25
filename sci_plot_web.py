@@ -1,7 +1,7 @@
 """
-sci_plot_web.py - 科研绘图工具 Web版 (Origin风格 v3.0)
-=====================================================
-模仿Origin的作图逻辑，支持中英文混合字体、坐标轴设置、网格线、刻度设置等
+sci_plot_web.py - 科研绘图工具 Web版 (v3.1 - 基于matplotlib官方文档)
+====================================================================
+参考: https://matplotlib.net.cn/stable/users/index.html
 
 启动方法:
     streamlit run sci_plot_web.py
@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
+import matplotlib.colors as mcolors
 from matplotlib.ticker import MultipleLocator, AutoMinorLocator
 import seaborn as sns
 from io import BytesIO
@@ -28,22 +29,32 @@ st.set_page_config(
 )
 
 # ============================================================
-# 中文字体支持
+# 字体配置 - 基于matplotlib官方文档
 # ============================================================
-# 设置中英文混合字体
-plt.rcParams['font.family'] = ['Times New Roman', 'SimHei']  # 英文用Times New Roman，中文用黑体
-plt.rcParams['axes.unicode_minus'] = False  # 显示负号
+# 参考: https://matplotlib.net.cn/stable/users/explain/text/fonts.html
+# Matplotlib 3.6+ 支持字体回退，可以在font.sans-serif中设置多个字体
 
-# 字体代码对照表
-FONT_MAP = {
-    'SimHei': '黑体',
-    'KaiTi': '楷体',
-    'LiSu': '隶书',
-    'FangSong': '仿宋',
-    'YouYuan': '幼圆',
-    'SimSun': '宋体',
-    'Microsoft YaHei': '微软雅黑',
-}
+# 检测系统可用字体
+def get_available_fonts():
+    """获取系统可用的字体列表"""
+    available = {f.name for f in fm.fontManager.ttflist}
+    # 常用中英文字体
+    preferred = [
+        'Times New Roman', 'Arial', 'Calibri', 'Cambria',
+        'Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi', 
+        'FangSong', 'Noto Sans CJK SC', 'Noto Sans CJK JP'
+    ]
+    return [f for f in preferred if f in available]
+
+AVAILABLE_FONTS = get_available_fonts()
+
+# 设置默认字体（字体回退机制）
+# 按顺序尝试：Times New Roman -> Arial -> 系统中文字体
+plt.rcParams['font.sans-serif'] = ['Times New Roman', 'Arial', 'SimHei', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False  # 正确显示负号
+
+# CSS4颜色名称（matplotlib内置）
+CSS4_COLORS = list(mcolors.CSS4_COLORS.keys())[:50]  # 取前50个常用颜色
 
 # ============================================================
 # 自定义样式
@@ -121,24 +132,31 @@ def axis_settings_section():
     config['xlabel'] = st.sidebar.text_input("X轴标签", value="")
     config['ylabel'] = st.sidebar.text_input("Y轴标签", value="")
     
-    # 2. 字体设置
+    # 2. 字体设置 - 基于matplotlib官方字体回退机制
     st.sidebar.subheader("🔤 字体设置")
+    
+    # 构建可用字体列表
+    en_fonts = [f for f in AVAILABLE_FONTS if f in ['Times New Roman', 'Arial', 'Calibri', 'Cambria', 'Georgia']]
+    if not en_fonts:
+        en_fonts = ['Times New Roman', 'Arial']
+    
+    cn_fonts = [f for f in AVAILABLE_FONTS if f in ['Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi', 'FangSong']]
+    if not cn_fonts:
+        cn_fonts = ['SimHei', 'Microsoft YaHei']
     
     # 英文字体
     config['en_font'] = st.sidebar.selectbox(
         "英文字体",
-        ['Times New Roman', 'Arial', 'Calibri', 'Cambria', 'Georgia'],
+        en_fonts,
         index=0
     )
     
     # 中文字体
     config['cn_font'] = st.sidebar.selectbox(
         "中文字体",
-        ['SimHei(黑体)', 'KaiTi(楷体)', 'SimSun(宋体)', 'FangSong(仿宋)', 'Microsoft YaHei(微软雅黑)'],
+        cn_fonts,
         index=0
     )
-    # 提取字体代码
-    config['cn_font_code'] = config['cn_font'].split('(')[0]
     
     # 标题字体大小
     col1, col2 = st.sidebar.columns(2)
@@ -253,21 +271,47 @@ def style_settings_section():
     with col2:
         style['marker_edge_width'] = st.slider("标记边框", 0.0, 2.0, 0.5)
     
-    # 颜色设置
-    style['use_custom_colors'] = st.sidebar.checkbox("自定义颜色", value=False)
-    if style['use_custom_colors']:
-        st.sidebar.markdown("**选择颜色 (最多10个):**")
-        default_colors = ['#E64B35', '#4DBBD5', '#00A087', '#3C5488', '#F39B7F',
-                          '#8491B4', '#91D1C2', '#DC0000', '#7E6148', '#B09C85']
-        style['custom_colors'] = []
-        for i in range(10):
-            color = st.sidebar.color_picker(f"颜色{i+1}", default_colors[i], key=f"style_color_{i}")
-            style['custom_colors'].append(color)
+    # 颜色设置 - 简化版
+    st.sidebar.markdown("**🎨 颜色方案:**")
+    
+    # 预设配色方案
+    color_presets = {
+        'Nature科研': ['#E64B35', '#4DBBD5', '#00A087', '#3C5488', '#F39B7F'],
+        '暖色调': ['#FF6B6B', '#FFA07A', '#FFD700', '#FF8C00', '#FF4500'],
+        '冷色调': ['#4169E1', '#00CED1', '#20B2AA', '#5F9EA0', '#4682B4'],
+        '灰度': ['#2C2C2C', '#4A4A4A', '#6B6B6B', '#8C8C8C', '#ADADAD'],
+        '彩虹': ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF'],
+        'Pastel': ['#FFB3BA', '#BAFFC9', '#BAE1FF', '#FFFFBA', '#FFD1DC'],
+        'Set1': ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00'],
+        'Set2': ['#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3', '#a6d854'],
+    }
+    
+    color_mode = st.sidebar.radio("颜色模式", ["预设方案", "自定义颜色"], horizontal=True)
+    
+    if color_mode == "预设方案":
+        preset_name = st.sidebar.selectbox("选择配色", list(color_presets.keys()), index=0)
+        style['custom_colors'] = color_presets[preset_name]
+        style['use_custom_colors'] = False
+        
+        # 显示颜色预览
+        preview_html = '<div style="display: flex; gap: 3px; margin: 5px 0;">'
+        for c in color_presets[preset_name]:
+            preview_html += f'<div style="width: 30px; height: 20px; background: {c}; border-radius: 3px; border: 1px solid #ddd;"></div>'
+        preview_html += '</div>'
+        st.sidebar.markdown(preview_html, unsafe_allow_html=True)
     else:
-        # 预设配色
-        palettes = ['Nature', 'Set1', 'Set2', 'Set3', 'Paired', 'Dark2', 
-                    'Blues', 'Greens', 'Reds', 'RdBu_r']
-        style['palette'] = st.sidebar.selectbox("预设配色", palettes, index=0)
+        # 简化的自定义颜色 - 只设置前5个
+        st.sidebar.markdown("**选择5个颜色:**")
+        default_colors = ['#E64B35', '#4DBBD5', '#00A087', '#3C5488', '#F39B7F']
+        style['custom_colors'] = []
+        
+        cols = st.sidebar.columns(5)
+        for i in range(5):
+            with cols[i]:
+                color = st.color_picker(f"C{i+1}", default_colors[i], key=f"color_{i}", label_visibility="collapsed")
+                style['custom_colors'].append(color)
+        
+        style['use_custom_colors'] = True
     
     # 填充设置
     style['fill_alpha'] = st.sidebar.slider("填充透明度", 0.0, 1.0, 0.0)
@@ -279,21 +323,32 @@ def style_settings_section():
 # ============================================================
 
 def apply_origin_style(ax, config, style):
-    """应用Origin风格设置到图表"""
+    """
+    应用Origin风格设置到图表
+    参考: https://matplotlib.net.cn/stable/users/explain/text/fonts.html
+    """
     
-    # 1. 设置字体
-    plt.rcParams['font.family'] = [config['en_font'], config['cn_font_code']]
+    # 1. 设置字体 - 使用font.sans-serif支持字体回退
+    # 按顺序尝试：英文字体 -> 中文字体 -> 默认字体
+    plt.rcParams['font.sans-serif'] = [config['en_font'], config['cn_font'], 'DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False
     
     # 2. 设置标题
     title_weight = 'bold' if config['title_bold'] else 'normal'
-    ax.set_title(config['title'], fontsize=config['title_fontsize'], 
-                 fontweight=title_weight, pad=config['labelpad'])
+    ax.set_title(config['title'], 
+                 fontsize=config['title_fontsize'], 
+                 fontweight=title_weight, 
+                 pad=config['labelpad'])
     
-    # 3. 设置轴标签
-    ax.set_xlabel(config['xlabel'], fontsize=config['label_fontsize'], 
-                  fontfamily=config['en_font'], labelpad=config['labelpad'])
-    ax.set_ylabel(config['ylabel'], fontsize=config['label_fontsize'],
-                  fontfamily=config['en_font'], labelpad=config['labelpad'])
+    # 3. 设置轴标签 - 使用fontfamily参数
+    ax.set_xlabel(config['xlabel'], 
+                  fontsize=config['label_fontsize'],
+                  fontfamily=config['en_font'], 
+                  labelpad=config['labelpad'])
+    ax.set_ylabel(config['ylabel'], 
+                  fontsize=config['label_fontsize'],
+                  fontfamily=config['en_font'], 
+                  labelpad=config['labelpad'])
     
     # 4. 设置边框
     if config['show_border']:
@@ -443,42 +498,70 @@ def data_input_section():
 # ============================================================
 
 def data_editor_section(df):
-    """数据编辑区域"""
+    """数据编辑区域 - 稳定版"""
     st.markdown("---")
     st.subheader("📝 数据编辑")
     
-    col1, col2, col3 = st.columns(3)
+    # 使用session state保存数据
+    if 'edited_df' not in st.session_state:
+        st.session_state.edited_df = df.copy()
+    
+    # 操作按钮
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.markdown("**添加行**")
-        add_row_count = st.number_input("添加行数", 1, 10, 1, key="add_row_count")
-        if st.button("➕ 添加空行"):
-            new_rows = pd.DataFrame([[np.nan] * len(df.columns)] * add_row_count, 
-                                    columns=df.columns)
-            df = pd.concat([df, new_rows], ignore_index=True)
-            st.success(f"已添加 {add_row_count} 行")
+        add_rows = st.number_input("添加行数", 1, 10, 1, key="add_rows_input")
+        if st.button("➕ 添加空行", key="add_rows_btn"):
+            new_rows = pd.DataFrame([[np.nan] * len(st.session_state.edited_df.columns)] * add_rows,
+                                    columns=st.session_state.edited_df.columns)
+            st.session_state.edited_df = pd.concat([st.session_state.edited_df, new_rows], 
+                                                    ignore_index=True)
+            st.rerun()
     
     with col2:
-        st.markdown("**添加列**")
-        new_col_name = st.text_input("新列名", "New_Column", key="new_col_name")
-        if st.button("➕ 添加列"):
-            df[new_col_name] = np.nan
-            st.success(f"已添加列: {new_col_name}")
+        new_col = st.text_input("新列名", "New_Column", key="new_col_input")
+        if st.button("➕ 添加列", key="add_col_btn"):
+            st.session_state.edited_df[new_col] = np.nan
+            st.rerun()
     
     with col3:
-        st.markdown("**删除操作**")
-        if st.button("🗑️ 删除最后一行") and len(df) > 0:
-            df = df.iloc[:-1]
-            st.success("已删除最后一行")
-        if st.button("🗑️ 删除最后一列") and len(df.columns) > 1:
-            df = df.iloc[:, :-1]
-            st.success("已删除最后一列")
+        if st.button("🗑️ 删除最后行", key="del_row_btn"):
+            if len(st.session_state.edited_df) > 1:
+                st.session_state.edited_df = st.session_state.edited_df.iloc[:-1]
+                st.rerun()
     
-    # 可编辑数据表
-    st.markdown("**直接编辑数据 (双击单元格编辑):**")
-    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+    with col4:
+        if st.button("🗑️ 删除最后列", key="del_col_btn"):
+            if len(st.session_state.edited_df.columns) > 1:
+                st.session_state.edited_df = st.session_state.edited_df.iloc[:, :-1]
+                st.rerun()
     
-    return edited_df
+    # 显示数据表（使用较稳定的配置）
+    st.markdown("**数据表格:**")
+    
+    # 提供两种编辑模式
+    edit_mode = st.radio("编辑模式", ["查看模式", "编辑模式"], horizontal=True, key="edit_mode")
+    
+    if edit_mode == "编辑模式":
+        try:
+            # 使用更稳定的data_editor配置
+            edited = st.data_editor(
+                st.session_state.edited_df,
+                use_container_width=True,
+                num_rows="fixed",  # 固定行数更稳定
+                key="stable_editor"
+            )
+            st.session_state.edited_df = edited
+        except Exception as e:
+            st.warning(f"编辑器异常，已切换到查看模式")
+            st.dataframe(st.session_state.edited_df, use_container_width=True)
+    else:
+        st.dataframe(st.session_state.edited_df, use_container_width=True)
+    
+    # 显示数据形状
+    st.caption(f"当前数据: {st.session_state.edited_df.shape[0]}行 × {st.session_state.edited_df.shape[1]}列")
+    
+    return st.session_state.edited_df
 
 # ============================================================
 # 图表绘制函数
@@ -758,6 +841,262 @@ def plot_dual_axis(df, config, style):
     
     return fig
 
+def plot_subplots(df, config, style):
+    """
+    子图组合
+    参考: https://matplotlib.net.cn/stable/users/explain/axes/
+    """
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    
+    # 子图布局选择
+    st.markdown("**子图布局设置:**")
+    col1, col2 = st.columns(2)
+    with col1:
+        layout = st.selectbox("布局", ['1×2', '2×1', '2×2', '2×3', '3×2', '3×3'], index=2)
+        rows, cols = map(int, layout.split('×'))
+    with col2:
+        fig_width = st.slider("总宽度", 6, 16, 10)
+        fig_height = st.slider("总高度", 4, 12, 8)
+    
+    # 为每个子图选择数据
+    st.markdown("**为每个子图选择数据:**")
+    subplot_configs = []
+    for i in range(rows * cols):
+        st.markdown(f"**子图 {i+1}:**")
+        scol1, scol2, scol3 = st.columns(3)
+        with scol1:
+            x_col = st.selectbox(f"X轴", df.columns, key=f'subplot_{i}_x')
+        with scol2:
+            y_cols = st.multiselect(f"Y轴", numeric_cols, default=[numeric_cols[i % len(numeric_cols)]] if numeric_cols else [], 
+                                   key=f'subplot_{i}_y')
+        with scol3:
+            chart_type = st.selectbox(f"图表类型", ['折线图', '散点图', '柱状图'], key=f'subplot_{i}_type')
+        subplot_configs.append({'x': x_col, 'y': y_cols, 'type': chart_type})
+    
+    # 创建子图
+    # 参考matplotlib官方文档: plt.subplots()
+    fig, axes = plt.subplots(rows, cols, figsize=(fig_width, fig_height), 
+                            layout='constrained')
+    
+    # 处理单个子图的情况
+    if rows * cols == 1:
+        axes = np.array([axes])
+    axes = axes.flatten()
+    
+    colors = get_colors(config, style)
+    markers = ['o', 's', '^', 'D', 'v', 'p', 'h', '*']
+    
+    for i, (ax, subplot_cfg) in enumerate(zip(axes, subplot_configs)):
+        if subplot_cfg['y']:
+            x_data = df[subplot_cfg['x']]
+            for j, y_col in enumerate(subplot_cfg['y']):
+                y_data = df[y_col]
+                color = colors[j % len(colors)]
+                marker = markers[j % len(markers)]
+                
+                if subplot_cfg['type'] == '折线图':
+                    ax.plot(x_data, y_data, label=y_col, color=color, 
+                           marker=marker, markersize=4, linewidth=1.5)
+                elif subplot_cfg['type'] == '散点图':
+                    ax.scatter(x_data, y_data, label=y_col, color=color,
+                              s=30, alpha=0.7, edgecolors='white')
+                elif subplot_cfg['type'] == '柱状图':
+                    width = 0.8 / len(subplot_cfg['y'])
+                    x_pos = np.arange(len(x_data))
+                    offset = (j - len(subplot_cfg['y'])/2 + 0.5) * width
+                    ax.bar(x_pos + offset, y_data, width, label=y_col, color=color)
+                    if j == len(subplot_cfg['y']) - 1:
+                        ax.set_xticks(x_pos)
+                        ax.set_xticklabels(x_data)
+            
+            ax.set_xlabel(subplot_cfg['x'], fontsize=10)
+            ax.set_ylabel('Value', fontsize=10)
+            ax.legend(fontsize=8, loc='best')
+            ax.set_title(f'子图 {i+1}', fontsize=11, fontweight='bold')
+            
+            # 应用基本样式
+            ax.tick_params(direction='in', width=0.8, length=3)
+            for spine in ax.spines.values():
+                spine.set_linewidth(0.8)
+    
+    # 隐藏多余的子图
+    for i in range(len(subplot_configs), len(axes)):
+        axes[i].set_visible(False)
+    
+    fig.suptitle(config['title'], fontsize=config['title_fontsize'],
+                fontweight='bold' if config['title_bold'] else 'normal')
+    
+    return fig
+
+def plot_sankey(df, config, style):
+    """
+    桑基图 - 参考Show2Know
+    https://github.com/Winn1y/Show2Know/tree/main/7%20Sankey%20Plot
+    """
+    from matplotlib.sankey import Sankey
+    
+    st.markdown("**桑基图设置:**")
+    st.info("桑基图需要手动输入数据：source, target, value")
+    
+    # 手动输入桑基图数据
+    col1, col2 = st.columns(2)
+    with col1:
+        labels = st.text_input("节点标签 (逗号分隔)", value="A,B,C,D,E")
+        label_list = [l.strip() for l in labels.split(',')]
+    with col2:
+        flows = st.text_input("流量值 (逗号分隔)", value="10,-3,-4,-3")
+        flow_list = [float(f.strip()) for f in flows.split(',')]
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # 使用matplotlib内置的Sankey
+    sankey = Sankey(ax=ax, scale=0.01, offset=0.2, head_angle=180, format='%.0f', unit='%')
+    sankey.add(flows=flow_list, labels=label_list,
+               orientations=[0] * len(flow_list),
+               pathlengths=[0.25] * len(flow_list))
+    sankey.finish()
+    
+    ax.set_title(config['title'], fontsize=config['title_fontsize'],
+                fontweight='bold' if config['title_bold'] else 'normal')
+    
+    return fig
+
+def plot_ridge(df, config, style):
+    """
+    山脊图(Ridge/Joy Plot) - 参考Show2Know
+    https://github.com/Winn1y/Show2Know/tree/main/11%20Joy%20Plot
+    """
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    
+    selected_cols = st.multiselect("选择数据列", numeric_cols, default=numeric_cols[:3])
+    
+    if not selected_cols:
+        st.warning("请选择至少一列数据")
+        fig, ax = plt.subplots()
+        return fig
+    
+    # 创建数据框
+    plot_data = df[selected_cols]
+    
+    fig, ax = plt.subplots(figsize=(8, 6))
+    
+    # 使用seaborn的kdeplot绘制山脊图
+    sns.kdeplot(data=plot_data, fill=True, palette="husl", ax=ax, alpha=0.6)
+    
+    ax.set_xlabel(config['xlabel'] or 'Value', fontsize=config['label_fontsize'])
+    ax.set_ylabel('Density', fontsize=config['label_fontsize'])
+    ax.set_title(config['title'], fontsize=config['title_fontsize'],
+                fontweight='bold' if config['title_bold'] else 'normal')
+    
+    return fig
+
+def plot_ring(df, config, style):
+    """
+    环形图 - 参考Show2Know
+    https://github.com/Winn1y/Show2Know/tree/main/6%20Circle%20Plot
+    """
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    all_cols = df.columns.tolist()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        label_col = st.selectbox("标签列", all_cols, key='ring_label')
+    with col2:
+        value_col = st.selectbox("数值列", numeric_cols, key='ring_value')
+    
+    fig, ax = plt.subplots(figsize=(6, 6))
+    colors = get_colors(config, style, len(df))
+    
+    # 绘制饼图
+    wedges, texts, autotexts = ax.pie(df[value_col], labels=df[label_col],
+                                       colors=colors, autopct='%1.1f%%',
+                                       startangle=90, pctdistance=0.85)
+    
+    # 添加中心圆形成环形图
+    centre_circle = plt.Circle((0, 0), 0.70, fc='white')
+    ax.add_artist(centre_circle)
+    
+    ax.set_title(config['title'], fontsize=config['title_fontsize'],
+                fontweight='bold' if config['title_bold'] else 'normal')
+    
+    return fig
+
+def plot_stack_area(df, config, style):
+    """
+    堆叠面积图 - 参考Show2Know
+    https://github.com/Winn1y/Show2Know/tree/main/9%20Stack%20Plot
+    """
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        x_col = st.selectbox("X轴", df.columns, key='stack_x')
+    with col2:
+        y_cols = st.multiselect("Y轴数据", numeric_cols, key='stack_y')
+    
+    if not y_cols:
+        st.warning("请选择至少一列Y轴数据")
+        fig, ax = plt.subplots()
+        return fig
+    
+    fig, ax = plt.subplots(figsize=(8, 6))
+    colors = get_colors(config, style, len(y_cols))
+    
+    # 绘制堆叠面积图
+    ax.stackplot(df[x_col], *[df[c] for c in y_cols], labels=y_cols,
+                 colors=colors, alpha=0.8)
+    
+    ax.set_xlabel(config['xlabel'] or x_col, fontsize=config['label_fontsize'])
+    ax.set_ylabel(config['ylabel'] or 'Value', fontsize=config['label_fontsize'])
+    ax.set_title(config['title'], fontsize=config['title_fontsize'],
+                fontweight='bold' if config['title_bold'] else 'normal')
+    
+    if config['show_legend']:
+        ax.legend(loc=config['legend_loc'], fontsize=config['legend_fontsize'],
+                 frameon=config['legend_frame'])
+    
+    return fig
+
+def plot_parallel(df, config, style):
+    """
+    平行坐标图 - 参考Show2Know
+    https://github.com/Winn1y/Show2Know/tree/main/12%20Parallel%20Plot
+    """
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    all_cols = df.columns.tolist()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        class_col = st.selectbox("分类列 (可选)", ['无'] + all_cols, key='parallel_class')
+    with col2:
+        selected_cols = st.multiselect("数值列", numeric_cols, default=numeric_cols[:5])
+    
+    if not selected_cols:
+        st.warning("请选择至少两列数值数据")
+        fig, ax = plt.subplots()
+        return fig
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    if class_col != '无':
+        # 使用pandas的parallel_coordinates
+        pd.plotting.parallel_coordinates(df, class_col, 
+                                         cols=selected_cols,
+                                         colormap='viridis', ax=ax)
+    else:
+        # 绘制无分类的平行坐标图
+        for i, col in enumerate(selected_cols):
+            ax.plot(range(len(selected_cols)), [df[col].mean()] * len(selected_cols),
+                   marker='o', markersize=4, alpha=0.6)
+        ax.set_xticks(range(len(selected_cols)))
+        ax.set_xticklabels(selected_cols)
+    
+    ax.set_title(config['title'], fontsize=config['title_fontsize'],
+                fontweight='bold' if config['title_bold'] else 'normal')
+    ax.grid(True, alpha=0.3)
+    
+    return fig
+
 # ============================================================
 # 主界面
 # ============================================================
@@ -794,7 +1133,8 @@ def main():
         st.markdown("---")
         chart_type = st.selectbox(
             "📊 选择图表类型",
-            ["折线图", "散点图", "柱状图", "误差线图", "箱线图", "热力图", "双Y轴图"]
+            ["折线图", "散点图", "柱状图", "误差线图", "箱线图", "热力图", "双Y轴图", 
+             "子图组合", "桑基图", "山脊图", "环形图", "堆叠面积图", "平行坐标图"]
         )
         
         # 绘制图表
@@ -806,6 +1146,12 @@ def main():
             "箱线图": plot_box,
             "热力图": plot_heatmap,
             "双Y轴图": plot_dual_axis,
+            "子图组合": plot_subplots,
+            "桑基图": plot_sankey,
+            "山脊图": plot_ridge,
+            "环形图": plot_ring,
+            "堆叠面积图": plot_stack_area,
+            "平行坐标图": plot_parallel,
         }
         
         fig = chart_functions[chart_type](df, config, style)
@@ -841,9 +1187,33 @@ def main():
         
         # 显示帮助
         st.markdown("---")
-        st.subheader("📖 Origin风格设置说明")
+        st.subheader("📖 功能说明")
         
         st.markdown("""
+        ### 支持的图表类型 (集成自Show2Know)
+        
+        **基础图表:**
+        - **折线图**: 显示数据趋势
+        - **散点图**: 显示数据分布
+        - **柱状图**: 比较数据大小
+        - **误差线图**: 显示数据误差
+        
+        **统计图表:**
+        - **箱线图**: 显示数据分布
+        - **热力图**: 显示相关性矩阵
+        - **山脊图**: 多组数据密度分布对比
+        
+        **高级图表:**
+        - **双Y轴图**: 共享X轴的双Y轴
+        - **子图组合**: 多图组合展示
+        - **桑基图**: 流量/转移可视化
+        - **环形图**: 占比展示
+        - **堆叠面积图**: 多系列堆叠
+        - **平行坐标图**: 多维数据对比
+        
+        ### 致谢
+        部分图表代码参考自 [Show2Know](https://github.com/Winn1y/Show2Know)
+        
         ### 字体设置
         - **英文字体**: Times New Roman, Arial等
         - **中文字体**: 黑体(SimHei), 楷体(KaiTi), 宋体(SimSun)等
@@ -860,6 +1230,11 @@ def main():
         - **标记**: 圆圈、方块、三角形、菱形等
         - **颜色**: 自定义颜色或预设配色
         
+        ### 数学表达式
+        支持LaTeX格式的数学表达式，例如：
+        - `$\sigma_i=15$` 显示为 σᵢ=15
+        - `$\mu=115, \sigma=15$` 显示为 μ=115, σ=15
+        
         ### 字体代码对照
         | 代码 | 字体 |
         |------|------|
@@ -868,6 +1243,12 @@ def main():
         | SimSun | 宋体 |
         | FangSong | 仿宋 |
         | Microsoft YaHei | 微软雅黑 |
+        
+        ### 参考文档
+        - [Matplotlib中文文档](https://matplotlib.net.cn/stable/)
+        - [用户指南](https://matplotlib.net.cn/stable/users/index.html)
+        - [字体设置](https://matplotlib.net.cn/stable/users/explain/text/fonts.html)
+        - [颜色指定](https://matplotlib.net.cn/stable/users/explain/colors/colors.html)
         """)
 
 if __name__ == "__main__":
